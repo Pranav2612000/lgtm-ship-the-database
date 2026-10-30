@@ -1,0 +1,113 @@
+# Local LGTM stack for the talk: the same components, versions and Grafana
+# provisioning as our prod stack, on docker-compose instead of a GCP VM.
+#
+#   Grafana  http://localhost:3000
+#   OTLP     localhost:4317 (gRPC), localhost:4318 (HTTP)  -> Alloy
+#   MCP      http://localhost:8000/mcp
+
+name: lgtm
+
+services:
+  mimir:
+    image: grafana/mimir:2.14.0
+    command: ["-config.file=/etc/mimir.yaml"]
+    user: "0"
+    volumes:
+      - ./mimir/mimir.yaml:/etc/mimir.yaml:ro
+      - mimir-data:/data/mimir
+    ports:
+      - "127.0.0.1:9009:9009"
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.2.1
+    command: ["-config.file=/etc/loki.yaml"]
+    user: "0"
+    volumes:
+      - ./loki/loki.yaml:/etc/loki.yaml:ro
+      - loki-data:/data/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo.yaml"]
+    user: "0"
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/data/tempo
+    ports:
+      - "127.0.0.1:3200:3200"
+    depends_on:
+      - mimir
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.20.0
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --disable-reporting
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # To read the logs of the infino-* containers.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:12345:12345"
+    depends_on:
+      - mimir
+      - loki
+      - tempo
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - mimir
+      - loki
+      - tempo
+    restart: unless-stopped
+
+  # Grafana MCP server, read-only, with the same tools as prod.
+  mcp-grafana:
+    image: grafana/mcp-grafana:2.1.1
+    command:
+      - -t
+      - streamable-http
+      - --address=0.0.0.0:8000
+      - --allowed-hosts=localhost:8000,127.0.0.1:8000
+      - --disable-write
+      - --enabled-tools=loki,prometheus,datasource,tempo
+      - --loki-guardrail-mode=enforce
+    environment:
+      GRAFANA_URL: http://grafana:3000
+      GRAFANA_USERNAME: admin
+      GRAFANA_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      - grafana
+    restart: unless-stopped
+
+volumes:
+  mimir-data:
+  loki-data:
+  tempo-data:
+  grafana-data:

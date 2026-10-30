@@ -1,0 +1,60 @@
+# Tempo, monolithic. Same as prod, but local disk instead of GCS.
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9097
+  grpc_server_max_recv_msg_size: 104857600 # 100MB
+  grpc_server_max_send_msg_size: 104857600 # 100MB
+  log_level: warn
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+querier:
+  frontend_worker:
+    grpc_client_config:
+      max_send_msg_size: 104857600 # 100MB
+      max_recv_msg_size: 104857600 # 100MB
+
+ingester:
+  # Short blocks so recent traces are queryable soon.
+  max_block_duration: 5m
+
+# Turns spans into metrics in Mimir:
+#   span-metrics   traces_spanmetrics_latency_* / _calls_total (latency per span)
+#   service-graphs traces_service_graph_* (the gateway -> worker service map)
+metrics_generator:
+  processor:
+    span_metrics:
+      histogram_buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60]
+      dimensions:
+        - service.instance.id
+  storage:
+    path: /data/tempo/generator/wal
+    remote_write:
+      - url: http://mimir:9009/api/v1/push
+        send_exemplars: true
+
+overrides:
+  defaults:
+    global:
+      max_bytes_per_trace: 52428800 # 50MB
+    metrics_generator:
+      processors: [span-metrics, service-graphs]
+
+compactor:
+  compaction:
+    block_retention: 168h
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /data/tempo/blocks
+    wal:
+      path: /data/tempo/wal

@@ -1,0 +1,109 @@
+// Grafana Alloy: the one place the demo services send telemetry to.
+//
+//   1. OTLP in (4317 gRPC / 4318 HTTP) -> metrics to Mimir, logs to Loki,
+//      traces to Tempo.
+//   2. Container stdout/stderr -> Loki. Like the journal shipper in prod, this
+//      catches what a process cannot export itself (a panic before logging is
+//      set up, a crash message). Lines already sent over OTLP are dropped.
+
+// --- 1. OTLP ---------------------------------------------------------------
+
+otelcol.receiver.otlp "default" {
+	grpc {
+		endpoint = "0.0.0.0:4317"
+	}
+
+	http {
+		endpoint = "0.0.0.0:4318"
+	}
+
+	output {
+		metrics = [otelcol.processor.batch.default.input]
+		logs    = [otelcol.processor.batch.default.input]
+		traces  = [otelcol.processor.batch.default.input]
+	}
+}
+
+otelcol.processor.batch "default" {
+	output {
+		metrics = [otelcol.exporter.otlphttp.mimir.input]
+		logs    = [otelcol.exporter.otlphttp.loki.input]
+		traces  = [otelcol.exporter.otlp.tempo.input]
+	}
+}
+
+otelcol.exporter.otlphttp "mimir" {
+	client {
+		endpoint = "http://mimir:9009/otlp"
+	}
+}
+
+otelcol.exporter.otlphttp "loki" {
+	client {
+		endpoint = "http://loki:3100/otlp"
+	}
+}
+
+otelcol.exporter.otlp "tempo" {
+	client {
+		endpoint = "tempo:4317"
+
+		tls {
+			insecure = true
+		}
+	}
+}
+
+// --- 2. Container logs -----------------------------------------------------
+
+discovery.docker "containers" {
+	host = "unix:///var/run/docker.sock"
+	// Default is 1m, too slow to catch a container that crashes quickly.
+	refresh_interval = "5s"
+}
+
+// Only the demo services: compose services named infino-*.
+discovery.relabel "infino" {
+	targets = discovery.docker.containers.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		regex         = "infino-.+"
+		action        = "keep"
+	}
+
+	// Same label as the OTLP logs, so both sit in one query.
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		target_label  = "service_name"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/?(.*)"
+		target_label  = "service_instance_id"
+	}
+}
+
+loki.source.docker "infino" {
+	host       = "unix:///var/run/docker.sock"
+	targets    = discovery.relabel.infino.output
+	labels     = {log_source = "docker"}
+	forward_to = [loki.process.filter.receiver]
+}
+
+loki.process "filter" {
+	forward_to = [loki.write.loki.receiver]
+
+	// A `tracing` fmt line (`<RFC 3339 UTC> <LEVEL> ...`), already sent over OTLP.
+	stage.drop {
+		expression          = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z +(?:TRACE|DEBUG|INFO|WARN|ERROR) "
+		drop_counter_reason = "exported_over_otlp"
+	}
+}
+
+loki.write "loki" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}

@@ -1,0 +1,468 @@
+# Alert rules, taken from prod and trimmed to the demo services.
+#
+# No `notification_settings` yet, so alerts go to Grafana's default contact
+# point. TODO: decide where alerts go for the talk.
+#
+# Loki rules use `execErrState: KeepLast`: a slow Loki should not fire every log
+# rule at once. `Loki not answering` covers a Loki that stays down.
+apiVersion: 1
+groups:
+- orgId: 1
+  name: inf-alerts
+  folder: infino_host_alerts
+  interval: 1m
+  rules:
+  - uid: dfuqdun9a2134e
+    title: High disk usage
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: mimir
+      model:
+        editorMode: code
+        expr: infino_host_disk_percent
+        instant: true
+        intervalMs: 1000
+        legendFormat: __auto
+        maxDataPoints: 43200
+        range: false
+        refId: A
+    - refId: C
+      queryType: expression
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        conditions:
+        - evaluator:
+            params:
+            - 80
+            type: gt
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            params: []
+            type: last
+          type: query
+        datasource:
+          type: __expr__
+          uid: __expr__
+        expression: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+        refId: C
+        type: threshold
+    noDataState: NoData
+    execErrState: Error
+    for: 1m
+    annotations:
+      description: 'The disk usage for service {{ $labels.service_name }} (instance: {{ $labels.instance }}) has exceeded
+        80% threshold. Current usage value: {{ $value }}%'
+      summary: 'High disk usage for service: {{ $labels.service_name }}'
+    labels:
+      service_name: ''
+      severity: critical
+    isPaused: false
+  - uid: ffuqegc7ppyioc
+    title: high memory usage
+    condition: C
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: mimir
+      model:
+        editorMode: code
+        expr: infino_host_ram_percent
+        instant: true
+        intervalMs: 1000
+        legendFormat: __auto
+        maxDataPoints: 43200
+        range: false
+        refId: A
+    - refId: C
+      queryType: expression
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        conditions:
+        - evaluator:
+            params:
+            - 90
+            type: gt
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            params: []
+            type: last
+          type: query
+        datasource:
+          type: __expr__
+          uid: __expr__
+        expression: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+        refId: C
+        type: threshold
+    noDataState: NoData
+    execErrState: Error
+    for: 1m
+    annotations:
+      description: 'The memory usage for service {{ $labels.service_name }} (instance: {{ $labels.instance }}) has exceeded
+        90% threshold. Current usage value: {{ $value }}%.'
+      summary: 'High memory usage for service: {{ $labels.service_name }}'
+    labels:
+      service_name: ''
+      severity: critical
+    isPaused: false
+  - uid: dfuvlpp2xa1oge
+    title: High error rate
+    condition: C
+    data:
+    - refId: A
+      queryType: range
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: loki
+      model:
+        datasource:
+          type: loki
+          uid: loki
+        editorMode: code
+        expr: sum by(service_name) (count_over_time({service_name=~"infino.*"} | detected_level = `error` [10m]))
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+        queryType: range
+        refId: A
+    - refId: reducer
+      queryType: expression
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        conditions:
+        - evaluator:
+            params:
+            - 0
+            - 0
+            type: gt
+          operator:
+            type: and
+          query:
+            params: []
+          reducer:
+            params: []
+            type: avg
+          type: query
+        datasource:
+          name: Expression
+          type: __expr__
+          uid: __expr__
+        expression: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+        reducer: last
+        refId: reducer
+        type: reduce
+    - refId: C
+      queryType: expression
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        conditions:
+        - evaluator:
+            params:
+            - 10
+            type: gt
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            params: []
+            type: last
+          type: query
+        datasource:
+          type: __expr__
+          uid: __expr__
+        expression: reducer
+        intervalMs: 1000
+        maxDataPoints: 43200
+        refId: C
+        type: threshold
+    noDataState: OK
+    execErrState: KeepLast
+    annotations:
+      description: 'Service {{ $labels.service_name }} has reported {{ $value }} errors over the last 10 minutes, exceeding
+        the threshold of 10.
+
+
+        Log Message Details:
+
+        - Service: {{ $labels.service_name }}
+
+        - Detected Level: {{ $labels.detected_level }}
+
+        - Value / Count: {{ $value }}'
+      summary: High error rate detected for service {{ $labels.service_name }}
+    labels:
+      severity: critical
+    isPaused: false
+    for: 0s
+  - uid: bfx7k2slowq19a
+    title: Slow query detected
+    condition: C
+    data:
+    - refId: A
+      queryType: range
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: loki
+      model:
+        datasource:
+          type: loki
+          uid: loki
+        editorMode: code
+        expr: sum by(service_name) (count_over_time({service_name=~"infino.*"} |= `Slow query detected` [5m]))
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+        queryType: range
+        refId: A
+    - refId: reducer
+      queryType: expression
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        datasource:
+          name: Expression
+          type: __expr__
+          uid: __expr__
+        expression: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+        reducer: last
+        refId: reducer
+        type: reduce
+    - refId: C
+      queryType: expression
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        conditions:
+        - evaluator:
+            params:
+            - 0
+            type: gt
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            params: []
+            type: last
+          type: query
+        datasource:
+          type: __expr__
+          uid: __expr__
+        expression: reducer
+        intervalMs: 1000
+        maxDataPoints: 43200
+        refId: C
+        type: threshold
+    noDataState: OK
+    execErrState: KeepLast
+    for: 0s
+    annotations:
+      description: 'Service {{ $labels.service_name }} logged {{ $value }} slow request(s) in the last 5 minutes.
+
+
+        Query the lines with: {service_name="{{ $labels.service_name }}"} |= `Slow query detected`'
+      summary: Slow requests detected on {{ $labels.service_name }}
+    labels:
+      severity: warning
+    isPaused: false
+  - uid: zpdxq7blxtbgaa
+    title: Process panicked
+    condition: C
+    data:
+    - refId: A
+      queryType: range
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: loki
+      model:
+        datasource:
+          type: loki
+          uid: loki
+        editorMode: code
+        expr: sum by(service_name, service_instance_id) (count_over_time({service_name=~"infino.*"} |= `panicked at ` [5m]))
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+        queryType: range
+        refId: A
+    - refId: reducer
+      queryType: expression
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        datasource:
+          name: Expression
+          type: __expr__
+          uid: __expr__
+        expression: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+        reducer: last
+        refId: reducer
+        type: reduce
+    - refId: C
+      queryType: expression
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        conditions:
+        - evaluator:
+            params:
+            - 0
+            type: gt
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            params: []
+            type: last
+          type: query
+        datasource:
+          type: __expr__
+          uid: __expr__
+        expression: reducer
+        intervalMs: 1000
+        maxDataPoints: 43200
+        refId: C
+        type: threshold
+    noDataState: OK
+    execErrState: KeepLast
+    for: 0s
+    annotations:
+      description: '{{ $labels.service_name }} on {{ $labels.service_instance_id }} panicked {{ $value }} time(s) in the last
+        5 minutes. A panic on a request task fails that request; on the main thread it takes the process down and systemd
+        restarts it.
+
+
+        Query the lines, with location and backtrace, with: {service_name="{{ $labels.service_name }}", service_instance_id="{{
+        $labels.service_instance_id }}"} |= `panicked at `'
+      summary: '{{ $labels.service_name }} panicked on {{ $labels.service_instance_id }}'
+    labels:
+      severity: critical
+    isPaused: false
+  - uid: hfx7k2lokidown
+    title: Loki not answering
+    condition: C
+    data:
+    - refId: A
+      queryType: range
+      relativeTimeRange:
+        from: 600
+        to: 0
+      datasourceUid: loki
+      model:
+        datasource:
+          type: loki
+          uid: loki
+        editorMode: code
+        expr: sum(count_over_time({service_name=~"infino.*"} [10m]))
+        instant: true
+        intervalMs: 1000
+        maxDataPoints: 43200
+        queryType: range
+        refId: A
+    - refId: reducer
+      queryType: expression
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        datasource:
+          name: Expression
+          type: __expr__
+          uid: __expr__
+        expression: A
+        intervalMs: 1000
+        maxDataPoints: 43200
+        reducer: last
+        refId: reducer
+        type: reduce
+    - refId: C
+      queryType: expression
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        conditions:
+        - evaluator:
+            params:
+            - 1
+            type: lt
+          operator:
+            type: and
+          query:
+            params:
+            - C
+          reducer:
+            params: []
+            type: last
+          type: query
+        datasource:
+          type: __expr__
+          uid: __expr__
+        expression: reducer
+        intervalMs: 1000
+        maxDataPoints: 43200
+        refId: C
+        type: threshold
+    noDataState: Alerting
+    execErrState: Alerting
+    for: 10m
+    annotations:
+      description: Loki has not answered the alert rules' queries, or has had no infino-* log lines, for 10 minutes. Every
+        log-based rule is holding its last state and cannot fire until Loki recovers.
+      summary: Loki is not answering alert queries; log-based alerting is blind
+    labels:
+      severity: warning
+    isPaused: false

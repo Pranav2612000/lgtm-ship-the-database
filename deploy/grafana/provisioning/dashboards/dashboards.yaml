@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: infino
+    orgId: 1
+    type: file
+    updateIntervalSeconds: 30
+    disableDeletion: false
+    # Read-only in the UI, like prod: the file in git is the source of truth.
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

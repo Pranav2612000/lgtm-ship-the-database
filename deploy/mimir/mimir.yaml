@@ -1,0 +1,55 @@
+# Mimir, monolithic single-binary mode. Same as prod, but local disk instead of GCS.
+target: all
+
+# Single tenant: no X-Scope-OrgID header needed for writes and queries.
+multitenancy_enabled: false
+
+server:
+  http_listen_port: 9009
+  grpc_listen_port: 9095
+  log_level: warn
+
+common:
+  storage:
+    backend: filesystem
+    filesystem:
+      dir: /data/mimir/blocks
+
+blocks_storage:
+  storage_prefix: blocks
+  tsdb:
+    dir: /data/mimir/tsdb
+  bucket_store:
+    sync_dir: /data/mimir/tsdb-sync
+
+compactor:
+  data_dir: /data/mimir/compactor
+
+ruler_storage:
+  storage_prefix: ruler
+
+ruler:
+  rule_path: /data/mimir/ruler
+
+alertmanager_storage:
+  storage_prefix: alertmanager
+
+alertmanager:
+  data_dir: /data/mimir/alertmanager
+
+# One node, so replication factor 1.
+ingester:
+  ring:
+    replication_factor: 1
+
+store_gateway:
+  sharding_ring:
+    replication_factor: 1
+
+limits:
+  compactor_blocks_retention_period: 7d
+  # A restarted process can re-send a slightly older window.
+  out_of_order_time_window: 5m
+
+activity_tracker:
+  filepath: /data/mimir/metrics-activity.log
