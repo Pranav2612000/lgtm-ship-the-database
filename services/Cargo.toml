@@ -12,14 +12,18 @@ name = "infino-worker"
 path = "src/bin/worker.rs"
 
 [dependencies]
+arrow-json = "58"
 axum = "0.8"
-futures = "0.3"
+datafusion-expr = "54"
+# The engine, fetched by get-engine.sh at the commit the build asks for.
+# detailed-tracing turns on the engine's own spans, like prod.
+infino = { path = "engine", features = ["detailed-tracing"] }
 rand = "0.9"
 reqwest = { version = "0.12", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sysinfo = { version = "0.39", default-features = false, features = ["system", "disk"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

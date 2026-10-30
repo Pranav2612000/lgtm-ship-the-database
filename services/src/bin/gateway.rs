@@ -8,13 +8,14 @@ use axum::{
     Router,
     body::Bytes,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode, header::CONTENT_TYPE},
+    http::{HeaderMap, HeaderName, StatusCode, header::CONTENT_TYPE},
     response::{IntoResponse, Response},
     routing::post,
 };
 use opentelemetry::{
     KeyValue, global,
     metrics::{Counter, Histogram},
+    trace::TraceContextExt,
 };
 use opentelemetry_http::HeaderInjector;
 use tracing::Span;
@@ -36,6 +37,8 @@ const OTHER_OPS: &[&str] = &[
     "drop_table",
     "optimize",
 ];
+
+const OPTIMIZE_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Clone)]
 struct AppState {
@@ -90,20 +93,22 @@ async fn forward(
         return (StatusCode::NOT_FOUND, format!("unknown op: {op}")).into_response();
     }
 
+    // optimize is long maintenance work, not a user request.
+    let timeout = if op == "optimize" {
+        OPTIMIZE_TIMEOUT
+    } else {
+        state.request_timeout
+    };
     let start = Instant::now();
-    let (status, body) =
-        tokio::time::timeout(state.request_timeout, handle(&state, &op, &database, body))
-            .await
-            .unwrap_or_else(|_| {
-                tracing::error!(
-                    timeout_ms = state.request_timeout.as_millis() as u64,
-                    "request timed out"
-                );
-                (
-                    StatusCode::GATEWAY_TIMEOUT,
-                    Bytes::from("request timed out"),
-                )
-            });
+    let (status, body) = tokio::time::timeout(timeout, handle(&state, &op, &database, body))
+        .await
+        .unwrap_or_else(|_| {
+            tracing::error!(timeout_ms = timeout.as_millis() as u64, "request timed out");
+            (
+                StatusCode::GATEWAY_TIMEOUT,
+                Bytes::from("request timed out"),
+            )
+        });
     let duration_ms = start.elapsed().as_millis() as u64;
 
     state.request_duration.record(
@@ -127,7 +132,22 @@ async fn forward(
         );
     }
 
-    (status, [(CONTENT_TYPE, "application/json")], body).into_response()
+    // The trace id, so a caller can open this request in Tempo.
+    let trace_id = Span::current()
+        .context()
+        .span()
+        .span_context()
+        .trace_id()
+        .to_string();
+    (
+        status,
+        [
+            (CONTENT_TYPE, "application/json".to_string()),
+            (HeaderName::from_static("x-trace-id"), trace_id),
+        ],
+        body,
+    )
+        .into_response()
 }
 
 async fn handle(state: &AppState, op: &str, database: &str, body: Bytes) -> (StatusCode, Bytes) {
