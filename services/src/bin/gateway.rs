@@ -2,7 +2,7 @@
 //!
 //!   POST /v1/{op}/{database}  ->  POST {WORKER_URL}/{op}/{database}
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use axum::{
     Router,
@@ -42,6 +42,8 @@ struct AppState {
     client: reqwest::Client,
     worker_url: String,
     slow_query_ms: u64,
+    request_timeout: Duration,
+    stall_percent: f64,
     queries: Counter<u64>,
     request_duration: Histogram<u64>,
 }
@@ -57,6 +59,8 @@ async fn run() {
         client: reqwest::Client::new(),
         worker_url: std::env::var("WORKER_URL").unwrap_or_else(|_| "http://localhost:9000".into()),
         slow_query_ms: env_u64("SLOW_QUERY_MS", 1000),
+        request_timeout: Duration::from_millis(env_u64("REQUEST_TIMEOUT_MS", 2000)),
+        stall_percent: env_u64("STALL_PERCENT", 0) as f64,
         queries: meter.u64_counter("infino.queries").build(),
         // Milliseconds, with the same buckets as prod.
         request_duration: meter
@@ -87,13 +91,19 @@ async fn forward(
     }
 
     let start = Instant::now();
-    let (status, body) = match call_worker(&state, &op, &database, body).await {
-        Ok(response) => response,
-        Err(err) => {
-            tracing::error!(%err, "worker request failed");
-            (StatusCode::BAD_GATEWAY, Bytes::from(err.to_string()))
-        }
-    };
+    let (status, body) =
+        tokio::time::timeout(state.request_timeout, handle(&state, &op, &database, body))
+            .await
+            .unwrap_or_else(|_| {
+                tracing::error!(
+                    timeout_ms = state.request_timeout.as_millis() as u64,
+                    "request timed out"
+                );
+                (
+                    StatusCode::GATEWAY_TIMEOUT,
+                    Bytes::from("request timed out"),
+                )
+            });
     let duration_ms = start.elapsed().as_millis() as u64;
 
     state.request_duration.record(
@@ -118,6 +128,31 @@ async fn forward(
     }
 
     (status, [(CONTENT_TYPE, "application/json")], body).into_response()
+}
+
+async fn handle(state: &AppState, op: &str, database: &str, body: Bytes) -> (StatusCode, Bytes) {
+    if let Err(err) = parse_request(&body, state.stall_percent).await {
+        return (StatusCode::BAD_REQUEST, Bytes::from(err.to_string()));
+    }
+    match call_worker(state, op, database, body).await {
+        Ok(response) => response,
+        Err(err) => {
+            tracing::error!(%err, "worker request failed");
+            (StatusCode::BAD_GATEWAY, Bytes::from(err.to_string()))
+        }
+    }
+}
+
+/// Checks that the body is valid JSON.
+///
+/// Demo 1: `STALL_PERCENT` of requests stall here for 0.5-3s, so some are slow
+/// and some hit the request timeout.
+#[tracing::instrument(name = "parse_request", skip_all)]
+async fn parse_request(body: &Bytes, stall_percent: f64) -> serde_json::Result<()> {
+    if rand::random_bool((stall_percent / 100.0).clamp(0.0, 1.0)) {
+        tokio::time::sleep(Duration::from_millis(rand::random_range(500..3000))).await;
+    }
+    serde_json::from_slice::<serde_json::Value>(body).map(|_| ())
 }
 
 #[tracing::instrument(name = "forward_to_worker", skip_all, fields(otel.kind = "client"))]

@@ -1,13 +1,18 @@
-//! Demo engine worker: a tiny in-memory store.
+//! Demo engine worker: a tiny store on the local file system.
 //!
 //!   POST /{op}/{database}
 //!
-//! Each `append` adds a new segment to the table, and every query reads all
-//! segments one after another. `optimize` merges the segments into one, so
-//! queries get faster. Reading a segment sleeps for `SEGMENT_READ_MS`, in place
-//! of an object store read.
+//! A table is a folder `{DATA_DIR}/{database}/{table}/`. Each `append` writes a
+//! new segment file, and every query reads all segment files. `optimize`
+//! merges the segments into one, so queries get faster. Each segment read also
+//! waits `SEGMENT_READ_MS`, to act like an object store read.
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    fs,
+    path::{Path as FsPath, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 use axum::{
     Json, Router,
@@ -27,15 +32,11 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 type Row = Map<String, Value>;
 type ApiError = (StatusCode, String);
 
-#[derive(Default)]
-struct Table {
-    segments: Vec<Vec<Row>>,
-}
-
 #[derive(Clone)]
 struct AppState {
-    /// Key: "{database}/{table}".
-    tables: Arc<RwLock<HashMap<String, Table>>>,
+    data_dir: PathBuf,
+    /// Writes take the write lock, so a query never sees a half-written table.
+    lock: Arc<RwLock<()>>,
     segment_read: Duration,
 }
 
@@ -65,7 +66,10 @@ async fn run() {
         .and_then(|v| v.parse().ok())
         .unwrap_or(5);
     let state = AppState {
-        tables: Arc::default(),
+        data_dir: std::env::var("DATA_DIR")
+            .unwrap_or_else(|_| "data".into())
+            .into(),
+        lock: Arc::default(),
         segment_read: Duration::from_millis(segment_read_ms),
     };
 
@@ -122,50 +126,63 @@ async fn execute(
     if op == "query_sql" {
         (request.table, limit) = parse_sql(&need(request.sql.take(), "sql")?)?;
     }
-    let key = format!("{database}/{}", request.table);
+    let dir = table_dir(&state.data_dir, database, &request.table)?;
 
     match op {
         "create_table" => {
-            state.tables.write().await.entry(key).or_default();
+            let _lock = state.lock.write().await;
+            fs::create_dir_all(&dir).map_err(internal)?;
             Ok(json!({ "created": request.table }))
         }
         "drop_table" => {
-            let dropped = state.tables.write().await.remove(&key).is_some();
+            let _lock = state.lock.write().await;
+            let dropped = fs::remove_dir_all(&dir).is_ok();
             Ok(json!({ "dropped": dropped }))
         }
         "append" | "update" | "delete" | "optimize" => {
-            let mut tables = state.tables.write().await;
-            let table = tables
-                .get_mut(&key)
-                .ok_or_else(|| not_found(&request.table))?;
-            write(table, op, request)
+            let _lock = state.lock.write().await;
+            let paths = segment_paths(&dir, &request.table)?;
+            write(&dir, &paths, op, request, state.segment_read).await
         }
         "query_sql" | "count" | "exact_match" | "token_match" | "vector_search"
         | "hybrid_search" => {
-            let tables = state.tables.read().await;
-            let table = tables.get(&key).ok_or_else(|| not_found(&request.table))?;
-            let rows = read_segments(table, state.segment_read).await;
+            let _lock = state.lock.read().await;
+            let paths = segment_paths(&dir, &request.table)?;
+            let rows = read_segments(&paths, state.segment_read).await?;
             query(rows, op, request, limit)
         }
         _ => Err((StatusCode::NOT_FOUND, format!("unknown op: {op}"))),
     }
 }
 
-fn write(table: &mut Table, op: &str, request: Request) -> Result<Value, ApiError> {
+async fn write(
+    dir: &FsPath,
+    paths: &[PathBuf],
+    op: &str,
+    request: Request,
+    delay: Duration,
+) -> Result<Value, ApiError> {
     match op {
         "append" => {
-            let count = request.rows.len();
-            table.segments.push(request.rows);
-            Ok(json!({ "appended": count, "segments": table.segments.len() }))
+            write_segment(&next_segment(dir, paths), &request.rows)?;
+            Ok(json!({ "appended": request.rows.len(), "segments": paths.len() + 1 }))
         }
         "update" => {
             let (field, value) = (need(request.field, "field")?, need(request.value, "value")?);
             let set = need(request.set, "set")?;
             let mut count = 0;
-            for row in table.segments.iter_mut().flatten() {
-                if row.get(&field) == Some(&value) {
+            for path in paths {
+                let mut rows = read_segment(path, delay).await?;
+                let before = count;
+                for row in rows
+                    .iter_mut()
+                    .filter(|row| row.get(&field) == Some(&value))
+                {
                     row.extend(set.clone());
                     count += 1;
+                }
+                if count > before {
+                    write_segment(path, &rows)?;
                 }
             }
             Ok(json!({ "updated": count }))
@@ -173,25 +190,34 @@ fn write(table: &mut Table, op: &str, request: Request) -> Result<Value, ApiErro
         "delete" => {
             let (field, value) = (need(request.field, "field")?, need(request.value, "value")?);
             let mut count = 0;
-            for segment in &mut table.segments {
-                let before = segment.len();
-                segment.retain(|row| row.get(&field) != Some(&value));
-                count += before - segment.len();
+            for path in paths {
+                let mut rows = read_segment(path, delay).await?;
+                let before = rows.len();
+                rows.retain(|row| row.get(&field) != Some(&value));
+                if rows.len() < before {
+                    count += before - rows.len();
+                    write_segment(path, &rows)?;
+                }
             }
             Ok(json!({ "deleted": count }))
         }
-        // optimize: merge all segments into one.
+        // optimize: merge all segments into one new segment.
         _ => {
-            let before = table.segments.len();
-            let rows: Vec<Row> = table.segments.drain(..).flatten().collect();
-            table.segments.push(rows);
-            Ok(json!({ "segments_before": before, "segments_after": 1 }))
+            let mut rows = Vec::new();
+            for path in paths {
+                rows.extend(read_segment(path, delay).await?);
+            }
+            write_segment(&next_segment(dir, paths), &rows)?;
+            for path in paths {
+                fs::remove_file(path).map_err(internal)?;
+            }
+            Ok(json!({ "segments_before": paths.len(), "segments_after": 1 }))
         }
     }
 }
 
-fn query(rows: Vec<&Row>, op: &str, request: Request, limit: usize) -> Result<Value, ApiError> {
-    let rows: Vec<&Row> = match op {
+fn query(rows: Vec<Row>, op: &str, request: Request, limit: usize) -> Result<Value, ApiError> {
+    let rows: Vec<Row> = match op {
         "count" => return Ok(json!({ "count": rows.len() })),
         "query_sql" => rows.into_iter().take(limit).collect(),
         "exact_match" => {
@@ -221,19 +247,61 @@ fn query(rows: Vec<&Row>, op: &str, request: Request, limit: usize) -> Result<Va
 }
 
 /// Reads the segments one after another.
-async fn read_segments(table: &Table, delay: Duration) -> Vec<&Row> {
+async fn read_segments(paths: &[PathBuf], delay: Duration) -> Result<Vec<Row>, ApiError> {
     let mut rows = Vec::new();
-    for (i, segment) in table.segments.iter().enumerate() {
-        tokio::time::sleep(delay)
-            .instrument(tracing::info_span!(
-                "read_segment",
-                segment = i,
-                rows = segment.len()
-            ))
-            .await;
+    for (i, path) in paths.iter().enumerate() {
+        let segment = read_segment(path, delay)
+            .instrument(tracing::info_span!("read_segment", segment = i))
+            .await?;
         rows.extend(segment);
     }
-    rows
+    Ok(rows)
+}
+
+async fn read_segment(path: &FsPath, delay: Duration) -> Result<Vec<Row>, ApiError> {
+    // Act like an object store read.
+    tokio::time::sleep(delay).await;
+    let bytes = tokio::fs::read(path).await.map_err(internal)?;
+    serde_json::from_slice(&bytes).map_err(internal)
+}
+
+fn write_segment(path: &FsPath, rows: &[Row]) -> Result<(), ApiError> {
+    fs::write(path, serde_json::to_vec(rows).map_err(internal)?).map_err(internal)
+}
+
+/// Segment files sorted by name: 000000.json, 000001.json, ...
+fn segment_paths(dir: &FsPath, table: &str) -> Result<Vec<PathBuf>, ApiError> {
+    let entries = fs::read_dir(dir).map_err(|_| not_found(table))?;
+    let mut paths: Vec<PathBuf> = entries
+        .filter_map(|entry| Some(entry.ok()?.path()))
+        .collect();
+    paths.sort();
+    Ok(paths)
+}
+
+fn next_segment(dir: &FsPath, paths: &[PathBuf]) -> PathBuf {
+    let next = paths
+        .last()
+        .and_then(|path| path.file_stem()?.to_str()?.parse::<u64>().ok())
+        .map_or(0, |n| n + 1);
+    dir.join(format!("{next:06}.json"))
+}
+
+/// Names become folder names, so allow only letters, digits, `_` and `-`.
+fn table_dir(data_dir: &FsPath, database: &str, table: &str) -> Result<PathBuf, ApiError> {
+    let valid = |name: &str| {
+        !name.is_empty()
+            && name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    };
+    if !valid(database) || !valid(table) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "database and table names may only use letters, digits, _ and -".into(),
+        ));
+    }
+    Ok(data_dir.join(database).join(table))
 }
 
 fn has_token(row: &Row, field: &str, token: &str) -> bool {
@@ -244,7 +312,7 @@ fn has_token(row: &Row, field: &str, token: &str) -> bool {
 }
 
 /// The `k` rows (default 10) with the highest dot product against the row's "vector" field.
-fn top_k<'a>(rows: Vec<&'a Row>, query: &[f64], k: Option<usize>) -> Vec<&'a Row> {
+fn top_k(rows: Vec<Row>, query: &[f64], k: Option<usize>) -> Vec<Row> {
     let score = |row: &Row| -> f64 {
         let Some(vector) = row.get("vector").and_then(Value::as_array) else {
             return f64::MIN;
@@ -255,7 +323,7 @@ fn top_k<'a>(rows: Vec<&'a Row>, query: &[f64], k: Option<usize>) -> Vec<&'a Row
             .map(|(a, b)| a.as_f64().unwrap_or(0.0) * b)
             .sum()
     };
-    let mut scored: Vec<(f64, &Row)> = rows.into_iter().map(|row| (score(row), row)).collect();
+    let mut scored: Vec<(f64, Row)> = rows.into_iter().map(|row| (score(&row), row)).collect();
     scored.sort_by(|a, b| b.0.total_cmp(&a.0));
     scored
         .into_iter()
@@ -293,4 +361,8 @@ fn need<T>(value: Option<T>, name: &str) -> Result<T, ApiError> {
 
 fn not_found(table: &str) -> ApiError {
     (StatusCode::NOT_FOUND, format!("table not found: {table}"))
+}
+
+fn internal(err: impl ToString) -> ApiError {
+    (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
 }

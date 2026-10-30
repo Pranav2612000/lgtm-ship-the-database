@@ -59,3 +59,10 @@ request is one trace. The service map and span latency panels come from this.
 Rules from prod: High disk usage, high memory usage, High error rate, Slow query
 detected, Process panicked, Loki not answering. They have no contact point yet,
 so they show up only in Grafana (Alerting > Alert rules).
+
+## Traces in Perfetto
+
+`./trace-to-perfetto.py <trace_id | exported.json>` downloads a trace from Tempo
+(or reads a JSON file exported from Grafana) and writes a file to open in
+https://ui.perfetto.dev. Each service is a process, and spans that run at the
+same time go on separate rows.

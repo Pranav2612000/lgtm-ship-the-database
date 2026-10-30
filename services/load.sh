@@ -29,7 +29,7 @@ while true; do
   if (( round % 20 == 0 )); then
     call delete "{\"table\":\"docs\",\"field\":\"id\",\"value\":$id}"
   fi
-  if (( OPTIMIZE_EVERY > 0 && round % OPTIMIZE_EVERY == 0 )); then
+  if (( OPTIMIZE_EVERY > 0 )) && (( round % OPTIMIZE_EVERY == 0 )); then
     call optimize '{"table":"docs"}'
   fi
   sleep 0.5

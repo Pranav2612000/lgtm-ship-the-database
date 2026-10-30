@@ -1,34 +1,45 @@
 # The demo gateway and worker. Start the LGTM stack in ../deploy first: these
 # join its network and send telemetry to its Alloy.
 #
+# Build the images with ./build-versions.sh (v1 and v2, see README).
+#
 #   Gateway  http://localhost:8080/v1/{op}/{database}
 
 name: infino-demo
 
 services:
   infino-worker:
-    build: .
-    image: infino-demo
+    # Demo 3: WORKER_VERSION=v2 deploys the parallel reads fix.
+    image: infino-demo:${WORKER_VERSION:-v1}
     command: ["infino-worker"]
     environment:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
       INSTANCE_ID: worker-1
+      DATA_DIR: /data
       SEGMENT_READ_MS: "5"
+    volumes:
+      - worker-data:/data
     restart: unless-stopped
 
   infino-gateway:
-    image: infino-demo
+    image: infino-demo:v1
     command: ["infino-gateway"]
     environment:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
       INSTANCE_ID: gateway-1
       WORKER_URL: http://infino-worker:9000
       SLOW_QUERY_MS: "1000"
+      REQUEST_TIMEOUT_MS: "2000"
+      # Demo 1: random stalls in parse_request. Set to 0 to turn off.
+      STALL_PERCENT: "5"
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
       - infino-worker
     restart: unless-stopped
+
+volumes:
+  worker-data:
 
 networks:
   default:
