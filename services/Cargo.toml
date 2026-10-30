@@ -1,0 +1,31 @@
+[package]
+name = "infino-demo"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "infino-gateway"
+path = "src/bin/gateway.rs"
+
+[[bin]]
+name = "infino-worker"
+path = "src/bin/worker.rs"
+
+[dependencies]
+axum = "0.8"
+reqwest = { version = "0.12", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sysinfo = { version = "0.39", default-features = false, features = ["system", "disk"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Same OpenTelemetry versions as infino-platform.
+opentelemetry = { version = "0.30", default-features = false, features = ["metrics", "logs", "trace"] }
+opentelemetry_sdk = { version = "0.30", default-features = false, features = ["metrics", "logs", "trace"] }
+opentelemetry-otlp = { version = "0.30", default-features = false, features = ["metrics", "logs", "trace", "http-proto", "reqwest-blocking-client"] }
+opentelemetry-http = { version = "0.30", default-features = false }
+# The feature puts the trace id on log records, so a log line links to its trace.
+opentelemetry-appender-tracing = { version = "0.30", default-features = false, features = ["experimental_use_tracing_span_context"] }
+tracing-opentelemetry = { version = "0.31", default-features = false }

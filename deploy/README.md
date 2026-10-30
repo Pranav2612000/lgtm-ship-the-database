@@ -29,9 +29,9 @@ infino-worker  ─┘                    └─> Tempo  (traces) ─ span metric
 container stdout/stderr ─> Alloy ─> Loki   (panics, crash output)
 ```
 
-## What the demo services must send
+## What the demo services send
 
-Dashboards and alerts expect these names (same as prod):
+The services in `../services` send these. Dashboards and alerts expect the same names as prod:
 
 - `service.name`: `infino-gateway` or `infino-worker`. It becomes the `job` label.
 - `service.instance.id`: for example `gateway-1`. It becomes the `instance` label.
@@ -41,7 +41,7 @@ Dashboards and alerts expect these names (same as prod):
 | Metric                            | Type             | Sent by | Labels   |
 |-----------------------------------|------------------|---------|----------|
 | `infino_queries`                  | counter          | gateway |          |
-| `infino_worker_request_duration`  | histogram, sec   | gateway | `status` |
+| `infino_worker_request_duration`  | histogram, ms    | gateway | `status`, `op` |
 | `infino_host_cpu_percent`         | gauge            | both    |          |
 | `infino_host_ram_percent`         | gauge            | both    |          |
 | `infino_host_disk_percent`        | gauge            | both    |          |

@@ -1,0 +1,36 @@
+# The demo gateway and worker. Start the LGTM stack in ../deploy first: these
+# join its network and send telemetry to its Alloy.
+#
+#   Gateway  http://localhost:8080/v1/{op}/{database}
+
+name: infino-demo
+
+services:
+  infino-worker:
+    build: .
+    image: infino-demo
+    command: ["infino-worker"]
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+      INSTANCE_ID: worker-1
+      SEGMENT_READ_MS: "5"
+    restart: unless-stopped
+
+  infino-gateway:
+    image: infino-demo
+    command: ["infino-gateway"]
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4318
+      INSTANCE_ID: gateway-1
+      WORKER_URL: http://infino-worker:9000
+      SLOW_QUERY_MS: "1000"
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - infino-worker
+    restart: unless-stopped
+
+networks:
+  default:
+    name: lgtm_default
+    external: true
