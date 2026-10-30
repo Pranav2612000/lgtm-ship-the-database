@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LGTM: Ship the Database</title>
+  <link rel="stylesheet" href="vendor/reveal/reset.css">
+  <link rel="stylesheet" href="vendor/reveal/reveal.css">
+  <link rel="stylesheet" href="vendor/reveal/plugin/highlight/monokai.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- ================= Intro ================= -->
+
+<section class="title-slide">
+  <h1>LGTM: Ship the Database
+    <!-- Lucide "rocket" icon (ISC license) -->
+    <svg class="rocket" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
+  </h1>
+  <p class="subtitle">How Loki, Grafana, Tempo &amp; Mimir help us build a database</p>
+  <p class="speaker">Pranav Joglekar · Founding Engineer, Infino AI</p>
+  <aside class="notes">~30s. Introduce the talk. The title has two meanings - we'll get to both in a minute.</aside>
+</section>
+
+<section>
+  <h2>About me</h2>
+  <div class="cols about" style="grid-template-columns: 300px 1fr">
+    <img class="photo" src="assets/pranav.jpg" alt="Pranav Joglekar running a marathon">
+    <div>
+      <p class="big-name"><a href="https://pranavjoglekarcodes.web.app/">Pranav Joglekar</a></p>
+      <p class="orange">Founding Engineer, <a href="https://infino.ai/">Infino AI</a></p>
+      <ul>
+        <li>Currently solving search at scale @ <a href="https://infino.ai/">Infino</a></li>
+        <li>Previously built <a href="https://www.postman.com/">Postman</a>'s <a href="https://learning.postman.com/docs/administration/managing-your-team/secret-scanner/">Secret Scanner</a> &amp; <a href="https://learning.postman.com/docs/sending-requests/postman-vault/postman-vault-secrets/">Vault</a></li>
+        <li>Side quests include <a href="https://www.helmer.app/">Helmer</a> and <a href="https://github.com/CapSoftware/scap">scap</a> (450k+ downloads, <a href="https://x.com/richiemcilroy/status/1819016993904693650/photo/1">acquired</a> by <a href="https://cap.so/">Cap</a>, <a href="https://crates.io/crates/zed-scap">used</a> by <a href="https://zed.dev/">Zed</a>)</li>
+        <li class="handles">
+          <a href="https://github.com/Pranav2612000">GitHub: Pranav2612000</a> ·
+          <a href="https://www.linkedin.com/in/pranav-joglekar/">LinkedIn: pranav-joglekar</a> ·
+          <a href="https://x.com/joglekar_pranav">Twitter: @joglekar_pranav</a>
+        </li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">~30s. Keep it short. Fill in the placeholders.</aside>
+</section>
+
+<section>
+  <h2>LGTM = Looks Good To Me</h2>
+  <div class="shot"><img src="assets/huge-pr.png" alt="GitHub pull request tabs: 1,137 comments, 6,755 commits, 7 checks, 2,188 files changed, +1,009,257 and -4,024 lines"></div>
+  <div class="cols three pr-stats">
+    <div><p class="label">Files changed</p><p class="stat">2,188</p></div>
+    <div><p class="label">Added</p><p class="stat green">+1,009,257</p></div>
+    <div><p class="label">Removed</p><p class="stat red">−4,024</p></div>
+  </div>
+  <aside class="notes">~45s. A real PR. Ask the room: who has typed LGTM on a PR they didn't fully read? With AI writing more of our code, PRs like this are getting more common. How do you approve it with confidence?</aside>
+</section>
+
+<section>
+  <h2>LGTM = Loki, Grafana, Tempo, Mimir</h2>
+  <div class="cols four">
+    <div class="card letter"><img class="stack-logo" src="assets/logos/loki.png" alt="Loki logo"><p class="name"><span class="green">L</span>oki</p><p class="muted">Logs</p><p><i>What happened</i></p></div>
+    <div class="card letter"><img class="stack-logo" src="assets/logos/grafana.svg" alt="Grafana logo"><p class="name"><span class="orange">G</span>rafana</p><p class="muted">Dashboards &amp; alerts</p><p><i>See it, get paged</i></p></div>
+    <div class="card letter"><img class="stack-logo" src="assets/logos/tempo.png" alt="Tempo logo"><p class="name"><span class="blue">T</span>empo</p><p class="muted">Traces</p><p><i>Where the time went</i></p></div>
+    <div class="card letter"><img class="stack-logo" src="assets/logos/mimir.png" alt="Mimir logo"><p class="name"><span class="purple">M</span>imir</p><p class="muted">Metrics</p><p><i>How much, how often</i></p></div>
+  </div>
+  <aside class="notes">~45s. The other LGTM. This crowd knows the stack, so keep it quick. Our version is self-hosted.</aside>
+</section>
+
+<section>
+  <h2>Takeaways</h2>
+  <p class="mission">Convince you that you need an <span class="orange">observability stack</span></p>
+  <p class="muted pike-intro">If you don't believe me, trust <b>Rob Pike</b></p>
+  <div class="cols two" style="align-items: stretch">
+    <div class="card rule">
+      <p class="rule-no orange">Rule 1</p>
+      <p><i>You can't tell where a program is going to spend its time. Bottlenecks occur in surprising places, so don't try to second guess and put in a speed hack until you've proven that's where the bottleneck is.</i></p>
+    </div>
+    <div class="card rule">
+      <p class="rule-no orange">Rule 2</p>
+      <p><i>Measure. Don't tune for speed until you've measured, and even then don't unless one part of the code overwhelms the rest.</i></p>
+    </div>
+  </div>
+  <aside class="notes">~1 min. One goal for the talk: by the end, you should be convinced you need an observability stack. Pike's rules 1 and 2 are why: you can't guess where the time goes, you have to measure. Everything after this is how we measure.</aside>
+</section>
+
+<!-- ================= Infino ================= -->
+
+<section>
+  <h2>Infino &amp; Infino Cloud</h2>
+  <div class="cols two products" style="align-items: stretch">
+    <div class="card">
+      <p class="product"><a href="https://github.com/infino-ai/infino">Infino</a></p>
+      <ul>
+        <li>Embedded, open source retrieval library built in Rust</li>
+        <li>Supports millisecond SQL, FTS, vector &amp; hybrid queries over TBs of data, and amongst the fastest in each (<a href="https://infino.ai/benchmarks/">benchmarks</a>)</li>
+        <li>Data stays plain Parquet, on local disk or object storage</li>
+        <li>Use it from Python, Node.js or Rust</li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="product"><a href="https://platform.infino.ws">Infino Cloud</a></p>
+      <ul>
+        <li>Managed offering of Infino (<a href="https://platform.infino.ws">platform.infino.ws</a>)</li>
+        <li>Same API: change only the <span class="mono">connect</span> target</li>
+        <li>Zero config setup: <span class="mono">optimize</span> and <span class="mono">gc</span> run for you</li>
+        <li>Enterprise features</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">~1.5 min. Be ready to back up "amongst the fastest" (infino.ai/benchmarks): on ClickBench (benchmark.clickhouse.com, infino folder upstream) Infino is #1 among search engines. VectorDBBench (zilliztech/VectorDBBench#863) and Search Benchmark, the Game (quickwit-oss/search-benchmark-game#92) PRs are still open, so do not claim a spot on those boards yet. Why latency is hard for us: sub-second queries over terabytes, but one query fans out into many object storage reads; every read is a network round trip, so one serial loop adds seconds; logs say THAT a query was slow, not WHERE; local profilers don't see time spent waiting on the network. The point: with this many network reads, the only way to see where time goes is tracing.</aside>
+</section>
+
+<!-- ================= Signals ================= -->
+
+<section>
+  <h2>Logs: what happened</h2>
+  <div class="card logs"><span class="yellow">WARN </span> gateway  Slow query detected  op=count  ms=1840  <span class="orange">trace_id=4bf92f35…</span>
+<span class="red">ERROR</span> gateway  request timed out  op=count
+<span class="red">ERROR</span> worker   panicked at src/bin/worker.rs:212</div>
+  <div class="cols three">
+    <div class="card"><p class="green"><b>Every log has a trace id</b></p><p>Click a log line in Loki and open its trace in Tempo</p></div>
+    <div class="card"><p class="green"><b>Alerts on log text</b></p><p>"Slow query detected", "panicked at", error rate</p></div>
+    <div class="card"><p class="green"><b>Container output too</b></p><p>Alloy ships stdout/stderr, so crashes are never lost</p></div>
+  </div>
+  <aside class="notes">~1 min. Example lines are illustrative - replace with real ones from Loki if you like.</aside>
+</section>
+
+<section>
+  <h2>Metrics: how much, how often</h2>
+  <table class="metrics">
+    <thead><tr><th>Metric</th><th>Type</th><th>Used for</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">infino_queries</td><td>counter</td><td>Traffic</td></tr>
+      <tr><td class="mono">infino_worker_request_duration</td><td>histogram (ms)</td><td>p95 latency by op, status</td></tr>
+      <tr><td class="mono">infino_process_rss_bytes</td><td>gauge</td><td>Memory per process</td></tr>
+      <tr class="hl"><td class="mono">infino_object_store_read_duration<br><span class="muted">cache misses only</span></td><td>histogram (ms)</td><td>Object store latency: p95 / p99, and p99 per node</td></tr>
+    </tbody>
+  </table>
+  <div class="card incident">
+    <p class="orange"><b>GCP incident: was it us?</b></p>
+    <p>Object store p99 went up on <b>every node at the same time</b>. So it wasn't one bad node or one bad deploy: it was the storage. That ruled out our code in minutes.</p>
+  </div>
+  <aside class="notes">~1.5 min. infino_object_store_read_duration times every object store read that misses the cache, so it is real storage time; the infra dashboard's "Object store latency" row charts it. Tell the GCP incident here: the "p99 by node (top 10)" panel showed every node slow at once, so it was the storage, not our code.</aside>
+</section>
+
+<section>
+  <h2>Traces: where the time went</h2>
+  <div class="cols" style="grid-template-columns: 3fr 1fr; margin: 30px 0 0">
+    <div class="trace">
+      <div class="span gw" style="top:0;    left:0%;  width:100%">query_sql</div>
+      <div class="span yl" style="top:70px; left:0%;  width:10%">sql.plan</div>
+      <div class="span yl" style="top:70px; left:11%; width:89%">sql.execute</div>
+      <div class="span gn" style="top:140px; left:12%; width:40%">hybrid.bm25</div>
+      <div class="span gn" style="top:140px; left:79%; width:4%"></div>
+      <div class="span gn" style="top:140px; left:84%; width:16%">search.resolve</div>
+      <div class="span pu" style="top:210px; left:12%; width:66%">hybrid.vector</div>
+      <div class="span bl" style="top:280px; left:13%; width:15%">fts.term_index</div>
+      <div class="span gy" style="top:280px; left:29%; width:7%"></div>
+      <div class="span gy" style="top:280px; left:37%; width:7%"></div>
+      <div class="span gy" style="top:280px; left:54%; width:7%"></div>
+      <div class="span gy" style="top:280px; left:62%; width:7%"></div>
+      <div class="span gy" style="top:280px; left:86%; width:6%"></div>
+      <div class="span gy" style="top:280px; left:93%; width:6%"></div>
+      <p class="muted time">time →</p>
+    </div>
+    <div class="trace-key">
+      <p><b class="orange">Trace</b>: one query, end to end</p>
+      <p><b class="blue">Span</b>: one timed step, with a parent and attributes</p>
+      <p class="muted">Grey: <span class="mono">get_range</span>, one object store read each. The small span is <span class="mono">hybrid.fuse</span>.</p>
+    </div>
+  </div>
+  <p class="yellow"><i>Hot-path spans sit behind a <span class="mono">detailed-tracing</span> feature flag, so they cost nothing when off.</i></p>
+  <aside class="notes">~1.5 min. A real hybrid search trace from the engine; every span name is real, the timings are drawn for the slide. query_sql is the root and carries the SQL plus per-query stats (rows out, read ranges, CPU). The two legs, BM25 and vector, run at the same time, and each has its own span, so the trace shows which leg the query waited on: here, vector. Under them, every object store read is a get_range span. Only query_sql is always on; the finer spans sit behind the detailed-tracing feature.</aside>
+</section>
+
+<!-- ================= OpenTelemetry ================= -->
+
+<section>
+  <h2>OpenTelemetry</h2>
+  <p class="lead">An open standard for producing and shipping telemetry: <span class="blue">traces</span>, <span class="purple">metrics</span> and <span class="green">logs</span>.</p>
+  <div class="cols two" style="align-items: stretch">
+    <div class="card">
+      <p class="orange"><b>What it is</b></p>
+      <ul>
+        <li>An API and SDK for every major language</li>
+        <li><b>OTLP</b>: one wire format for all three signals</li>
+        <li>Vendor neutral, a CNCF project</li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="orange"><b>Why we need it</b></p>
+      <ul>
+        <li>Instrument once, change backends freely</li>
+        <li>One pipeline instead of one agent per signal</li>
+        <li>Shared trace id and <span class="mono">service.name</span>: Grafana jumps from a log to its trace</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">~1 min. OTel is the standard; LGTM is just one place to send it. Our code never names Loki, Tempo or Mimir: it speaks OTLP, and config decides where each signal goes.</aside>
+</section>
+
+<section>
+  <h2>Tracing in Rust: the <span class="mono orange">tracing</span> crate</h2>
+  <div class="cols" style="grid-template-columns: 1.75fr 1fr">
+    <div>
+      <p class="label"><span class="blue"><b>Spans</b></span>: timed steps</p>
+      <pre class="code-sm"><code class="language-rust" data-trim data-noescape>
+#[tracing::instrument(skip_all, fields(uri = uri, len = range.end - range.start))]
+async fn get_range(&amp;self, uri: &amp;str, range: Range&lt;u64&gt;) -> … { … }
+      </code></pre>
+      <p class="src">infino: <a href="https://github.com/infino-ai/infino/blob/3ab348bae54eb460aee07469c7a3b7d537c34d2f/src/storage/s3.rs#L525-L529">S3 range read</a></p>
+      <p class="label"><span class="green"><b>Events</b></span>: things that happened</p>
+      <pre class="code-sm"><code class="language-rust" data-trim data-noescape>
+warn!(attempt, error = %e, "transient object-store error; re-issuing");
+      </code></pre>
+      <p class="src">infino: <a href="https://github.com/infino-ai/infino/blob/3ab348bae54eb460aee07469c7a3b7d537c34d2f/src/storage/retry.rs#L110">object store retry</a></p>
+      <p class="label"><span class="purple"><b>Metrics</b></span>: events with a prefixed field</p>
+      <pre class="code-sm"><code class="language-rust" data-trim data-noescape>
+info!(monotonic_counter.infino_queries = 1, op = "count");
+info!(histogram.infino_worker_request_duration = ms, op, status);
+      </code></pre>
+      <p class="src">Example: <a href="https://docs.rs/tracing-opentelemetry/0.31.0/tracing_opentelemetry/struct.MetricsLayer.html">MetricsLayer docs</a></p>
+    </div>
+    <div class="card" style="align-self: center">
+      <p><b>The engine only emits spans and events.</b></p>
+      <p>It never mentions OpenTelemetry.</p>
+      <p>A <span class="orange">subscriber</span> decides where they go: stdout, a file, or OTLP.</p>
+    </div>
+  </div>
+  <aside class="notes">~1.5 min. The span and the event are real infino code (the span attribute is trimmed from a cfg_attr: in infino these detailed spans sit behind the detailed-tracing feature). Spans have a start and an end, so they become traces. Events are point-in-time, so they become logs. The metric lines are an example: the infino library emits no metrics itself. Metrics: tracing-opentelemetry's MetricsLayer (the "metrics" cargo feature) turns any event field prefixed monotonic_counter., counter. or histogram. into an OTel metric; the other fields become attributes. Honest caveats if asked: (1) Infino Cloud today calls the OTel meter API directly instead, same SDK and exporter, only the call site differs. (2) A metric event is still an event, so the log bridge ships it to Loki too unless you filter it. (3) Gauges need the metrics_gauge_unstable feature.</aside>
+</section>
+
+<section>
+  <h2>How it fits together</h2>
+  <div class="fit">
+    <div class="grp node-grp" style="left:0; top:0; width:900px; height:480px"><span>Node (VM)</span></div>
+    <div class="grp proc-grp" style="left:16px; top:34px; width:734px; height:342px"><span>Process: gateway / worker</span></div>
+    <div class="grp eng-grp" style="left:32px; top:68px; width:178px; height:296px"><span>Engine: infino</span></div>
+    <div class="grp mon-grp" style="left:960px; top:0; width:240px; height:480px"><span>Monitoring</span></div>
+
+    <svg class="wires" viewBox="0 0 1200 480">
+      <defs><marker id="fa" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#a9adb8"/></marker></defs>
+      <path d="M196,138 H226"/><path d="M512,138 H528"/><path d="M734,138 H770"/><path d="M886,138 H970"/>
+      <path d="M196,222 H226"/><path d="M512,222 H528"/><path d="M734,222 H770"/><path d="M886,222 H970"/>
+      <path d="M196,306 H226"/><path d="M512,306 H528"/><path d="M734,306 H770"/><path d="M886,306 H970"/>
+      <path d="M372,344 V388"/><path d="M512,428 H770"/>
+      <text x="755" y="124">OTLP</text>
+    </svg>
+
+    <div class="box bl" style="left:46px; top:100px">spans</div>
+    <div class="box pu" style="left:46px; top:184px">metric events</div>
+    <div class="box gr" style="left:46px; top:268px">events</div>
+
+    <div class="box bl mono wide" style="left:232px; top:100px">tracing-opentelemetry<small>OpenTelemetryLayer</small></div>
+    <div class="box pu mono wide" style="left:232px; top:184px">tracing-opentelemetry<small>MetricsLayer</small></div>
+    <div class="box gr mono wide" style="left:232px; top:268px">opentelemetry-appender-tracing<small>OpenTelemetryTracingBridge</small></div>
+
+    <div class="box bl mono sdk" style="left:534px; top:100px">SdkTracerProvider<small>batch</small></div>
+    <div class="box pu mono sdk" style="left:534px; top:184px">SdkMeterProvider<small>PeriodicReader</small></div>
+    <div class="box gr mono sdk" style="left:534px; top:268px">SdkLoggerProvider<small>batch</small></div>
+
+    <div class="box wide short" style="left:232px; top:396px">systemd journal<small>panics, OOM kills, stray stdout</small></div>
+    <div class="box yl alloy" style="left:776px; top:100px">Alloy<small>OTLP + journal</small></div>
+
+    <div class="box bl end" style="left:976px; top:100px">Tempo</div>
+    <div class="box pu end" style="left:976px; top:184px">Mimir</div>
+    <div class="box gr end" style="left:976px; top:268px">Loki</div>
+    <div class="box or end short" style="left:976px; top:396px">Grafana<small>queries all three</small></div>
+  </div>
+  <p class="muted pipe-note">The three layers sit on one <span class="mono">tracing_subscriber::registry()</span>, which also prints to stdout.</p>
+  <aside class="notes">~1.5 min. Read it as nested boxes: the engine only emits spans and events; the process that embeds it (gateway or worker) owns the subscriber, the SDK and the exporters; the node runs the process plus Alloy. Each process sends OTLP/HTTP (binary protobuf) to the Alloy on its node, and Alloy routes each signal: traces to Tempo, metrics to Mimir, logs to Loki. Alloy also reads the systemd journal, to catch what tracing cannot see: a panic before logging starts, an OOM kill, a unit dying. Traces and logs are batched; metrics are aggregated in memory and pushed by a PeriodicReader. If asked: an event inside a span also becomes a span event, and an ERROR event marks the span as failed. Logs carry the trace id, so Loki links to Tempo. Sampling is the SDK default (parent-based, always on), so a trace exports whole or not at all.</aside>
+</section>
+
+<!-- ================= Distributed tracing ================= -->
+
+<section>
+  <h2>Distributed tracing: one request, one trace</h2>
+  <div class="cols two">
+    <div>
+      <p class="orange"><b>Caller: send the current span</b></p>
+      <pre class="code-sm"><code class="language-rust" data-trim>
+let current = Span::current()
+    .context().span().span_context().clone();
+if current.is_valid() {
+    builder.header(TRACEPARENT_HEADER,
+                   traceparent(&amp;current))
+}
+      </code></pre>
+    </div>
+    <div>
+      <p class="blue"><b>Callee middleware: join the trace</b></p>
+      <pre class="code-sm"><code class="language-rust" data-trim>
+let caller = caller_from_headers(request.headers());
+let span = task_span(trace_id, None);
+if let Some(caller) = caller {
+    span.set_parent(Context::new()
+        .with_remote_span_context(caller));
+}
+      </code></pre>
+    </div>
+  </div>
+  <p class="src">From Infino Cloud (trimmed)</p>
+  <div class="card mono traceparent">
+    <span class="muted">traceparent:</span> 00-<b class="orange">4bf92f3577b34da6a3ce929d0e0e4736</b>-<b class="blue">00f067aa0ba902b7</b>-01
+  </div>
+  <p><b class="orange">trace id</b> stays the same across services. <b class="blue">parent span id</b> links the callee's spans under the caller's.</p>
+  <aside class="notes">~1.5 min. Real code from Infino Cloud, trimmed. Every outbound request goes through propagate(); every internal listener runs the adopt_trace axum middleware. W3C trace context over an HTTP header: without it you get two separate traces and can't tell the callee's time apart from the network.</aside>
+</section>
+
+<section>
+  <h2>Our setup</h2>
+  <div class="setup">
+    <svg viewBox="0 0 1200 300" aria-hidden="true">
+      <defs>
+        <marker id="s-mu" viewBox="0 0 10 10" markerWidth="4.4" markerHeight="4.4" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#a9adb8"/></marker>
+        <marker id="s-pu" viewBox="0 0 10 10" markerWidth="4.4" markerHeight="4.4" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b877d9"/></marker>
+        <marker id="s-gr" viewBox="0 0 10 10" markerWidth="4.4" markerHeight="4.4" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#73bf69"/></marker>
+        <marker id="s-bl" viewBox="0 0 10 10" markerWidth="4.4" markerHeight="4.4" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5794f2"/></marker>
+        <marker id="s-or" viewBox="0 0 10 10" markerWidth="4.4" markerHeight="4.4" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f46800"/></marker>
+      </defs>
+      <path class="mu" marker-end="url(#s-mu)" d="M170,90 C210,90 210,140 248,140"/>
+      <path class="mu" marker-end="url(#s-mu)" d="M170,210 C210,210 210,160 248,160"/>
+      <path class="pu" marker-end="url(#s-pu)" d="M440,140 C480,140 480,45 518,45"/>
+      <path class="gr" marker-end="url(#s-gr)" d="M440,150 H518"/>
+      <path class="bl" marker-end="url(#s-bl)" d="M440,160 C480,160 480,255 518,255"/>
+      <path class="pu" marker-end="url(#s-pu)" d="M690,45 C730,45 730,140 768,140"/>
+      <path class="gr" marker-end="url(#s-gr)" d="M690,150 H768"/>
+      <path class="bl" marker-end="url(#s-bl)" d="M690,255 C730,255 730,160 768,160"/>
+      <path class="or" marker-end="url(#s-or)" d="M940,140 C980,140 980,45 1018,45"/>
+      <path class="or" marker-end="url(#s-or)" d="M940,150 H1018"/>
+      <path class="or" marker-end="url(#s-or)" d="M940,160 C980,160 980,255 1018,255"/>
+    </svg>
+    <div class="node gw" style="left:0; top:58px; width:170px">infino-gateway</div>
+    <div class="node wk" style="left:0; top:178px; width:170px">infino-worker</div>
+    <div class="node yl big" style="left:250px; top:110px; width:190px">Alloy<small>OTLP + container logs</small></div>
+    <div class="node pu" style="left:520px; top:13px; width:170px">Mimir<small>metrics</small></div>
+    <div class="node gr" style="left:520px; top:118px; width:170px">Loki<small>logs</small></div>
+    <div class="node wk" style="left:520px; top:223px; width:170px">Tempo<small>traces</small></div>
+    <div class="node gw big" style="left:770px; top:110px; width:170px">Grafana<small>explore &amp; query</small></div>
+    <div class="node gw" style="left:1020px; top:13px; width:180px">Dashboards</div>
+    <div class="node rd" style="left:1020px; top:118px; width:180px">Alerts</div>
+    <div class="node pu" style="left:1020px; top:223px; width:180px">MCP</div>
+  </div>
+  <div class="cols three">
+    <div><p class="orange"><b>Self-hosted</b></p><p>Terraform for provisioning the stack, custom script for updates</p></div>
+    <div><p class="orange"><b>Git managed</b></p><p>Dashboards, alerts and other artifacts checked into our monorepo. Reviewed through PRs</p></div>
+    <div><p class="orange"><b>MCP</b></p><p>Claude reads our metrics, logs and traces through Grafana</p></div>
+  </div>
+  <aside class="notes">~1.5 min. The demo stack is a copy of prod on docker-compose: same images, datasources, dashboards and alert rules. Mention Terraform and dashboards-as-code here briefly. Say 'Infino Cloud' rather than internal names.</aside>
+</section>
+
+<section class="demo" data-background-color="#F46800">
+  <h2>Demo 1: requests that randomly slow down</h2>
+  <div class="cols" style="grid-template-columns: 1.3fr 1fr">
+    <ol class="steps">
+      <li><b>An alert fires</b><span>High error rate and Slow query detected</span></li>
+      <li><b>The dashboard confirms it</b><span>Gateway Overview: p95 latency and 5xx go up</span></li>
+      <li><b>Find the slow traces</b><span class="mono">{ name = "parse_request" &amp;&amp; duration &gt; 500ms }</span></li>
+      <li><b>Read the trace</b><span>It stops at parse_request and never reaches the worker</span></li>
+    </ol>
+    <div class="card dark">
+      <p class="orange"><b>On stage</b></p>
+      <pre class="plain">./load.sh
+
+# Grafana &gt; Alerting
+# Gateway Overview
+# Explore &gt; Tempo (TraceQL)
+
+# fix: STALL_PERCENT=0
+docker compose up -d</pre>
+    </div>
+  </div>
+  <aside class="notes">~3 min. Fallback: screenshots / recording. Show the alert firing first, then the dashboard, then TraceQL, then the trace. Point out the trace never reaches the worker, so the problem is in the gateway.</aside>
+</section>
+
+<!-- ================= Optimizer ================= -->
+
+<section>
+  <h2>Optimizing the Optimizer</h2>
+  <p class="muted"><b>What the trace showed → what we changed</b></p>
+  <div class="changes">
+    <div class="change fragment"><span>Network calls, e.g. manifest part GETs, done serially</span><i>→</i><b>Run them concurrently: <span class="mono">buffer_unordered</span></b></div>
+    <div class="change fragment"><span>Same section fetched many times</span><i>→</i><b>Cache it to cut ranged GETs</b></div>
+    <div class="change fragment"><span><span class="mono">build_from_readers_fts_merge_to</span> took the most time</span><i>→</i><b>k-way merge of terms from all readers</b></div>
+    <div class="change fragment"><span>Term encoding used one core</span><i>→</i><b>Encode terms on all cores</b></div>
+    <div class="change fragment"><span>Doc order bisect ran serially</span><i>→</i><b>Run the bisect in parallel on the rayon pool</b></div>
+  </div>
+  <aside class="notes">~5 min (includes the traces). VERIFY before the talk: keep only the rows that actually made optimize faster. Rows are from your PRs: #1033 (parallel manifest part loads, issue #1025: 2,112 parts went from 287 s to ~10 s with 32 loads at a time), #886 (cache fts section), #834 (k-way merge), #865 (all cores for encoding), #862 (parallel bisect). The first step was adding spans per phase (#854) - say that out loud: measure first (Pike rule 2). Show the trace for each fix as you reveal its row, in Perfetto (ui.perfetto.dev): traces/tempo_optimizer.json (the serial manifest.part_load staircase), traces/optimizer_base.json, traces/optimizer_no_cache.json. Keep them pre-loaded in tabs.</aside>
+</section>
+
+<!-- ================= Serial reads ================= -->
+
+<!-- ================= AI ================= -->
+
+<section>
+  <h2>MCP: let the agent read your telemetry</h2>
+  <div class="flow">
+    <div class="node pu">Claude<small>asks questions</small></div>
+    <span class="arrow">→</span>
+    <div class="node gw">Grafana MCP<small>tools for the agent</small></div>
+    <span class="arrow">→</span>
+    <div class="node wk">Grafana<small>Mimir · Loki · Tempo</small></div>
+  </div>
+  <ul>
+    <li>Search traces with TraceQL, query logs with LogQL and metrics with PromQL</li>
+    <li>Read dashboards and alert rules</li>
+    <li>The agent gets the same view of the system that you get</li>
+  </ul>
+  <aside class="notes">~1 min. MCP = Model Context Protocol: a standard way to give an AI agent tools. Grafana ships an MCP server; we point Claude at it (deploy/.mcp.json). Then the live demo, from this slide (~3 min): plant a new problem the room hasn't seen in Demo 1; ask a plain question, e.g. "Why are count queries slow right now?"; watch the tool calls (alerts, then metrics, traces, logs); check its answer against the trace. Highest risk demo: network + non-deterministic, so have a screen recording ready.</aside>
+</section>
+
+<!-- ================= Close ================= -->
+
+<section>
+  <h2>Takeaways</h2>
+  <div class="cols three">
+    <div class="card"><p class="orange"><b>Measure first</b></p><p>You can't guess where the time goes. Traces show you.</p></div>
+    <div class="card"><p class="orange"><b>Wire up all three signals</b></p><p>Logs, metrics and traces, linked by the trace id.</p></div>
+    <div class="card"><p class="orange"><b>Make it readable for everyone</b></p><p>If a newcomer or an agent can read the trace, they can fix the bug.</p></div>
+  </div>
+  <aside class="notes">~1 min. This closes the promise from slide 5: you need an observability stack.</aside>
+</section>
+
+<section class="title-slide">
+  <h1>Thank you! Questions?</h1>
+  <p class="subtitle">infino.ai · github.com/infino-ai/infino</p>
+  <p class="speaker">Pranav Joglekar · github.com/Pranav2612000</p>
+  <aside class="notes">Leave this up during Q&amp;A.</aside>
+</section>
+
+</div></div>
+
+<script src="vendor/reveal/reveal.js"></script>
+<script src="vendor/reveal/plugin/highlight/highlight.js"></script>
+<script src="vendor/reveal/plugin/notes/notes.js"></script>
+<script>
+  // Infino logo at the bottom of every slide; dark ink on the orange demo slides.
+  document.querySelectorAll(".reveal .slides > section").forEach((slide) => {
+    const logo = document.createElement("img");
+    logo.className = "logo";
+    logo.alt = "Infino";
+    logo.src = slide.classList.contains("demo") ? "assets/infino-logo-dark.png" : "assets/infino-logo.png";
+    slide.appendChild(logo);
+  });
+  Reveal.initialize({
+    width: 1280,
+    height: 720,
+    margin: 0.04,
+    center: false,
+    hash: true,
+    slideNumber: "c/t",
+    controls: false,
+    transition: "fade",
+    transitionSpeed: "fast",
+    plugins: [RevealHighlight, RevealNotes],
+  });
+</script>
+</body>
+</html>
