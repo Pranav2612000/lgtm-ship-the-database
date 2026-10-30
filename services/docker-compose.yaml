@@ -56,7 +56,7 @@ services:
       # optimize gets 60s instead.
       REQUEST_TIMEOUT_MS: "2000"
       # Demo 1: random stalls in parse_request. Set to 0 to turn off.
-      STALL_PERCENT: "0"
+      STALL_PERCENT: "20"
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
