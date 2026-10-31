@@ -19,7 +19,7 @@
     <!-- Lucide "rocket" icon (ISC license) -->
     <svg class="rocket" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>
   </h1>
-  <p class="subtitle">How Loki, Grafana, Tempo &amp; Mimir help us build a database</p>
+  <p class="subtitle">How Loki, Grafana, Tempo &amp; Mimir help us fix slow queries in the database we build</p>
   <p class="speaker">Pranav Joglekar · Founding Engineer, Infino AI</p>
   <aside class="notes">~30s. Introduce the talk. The title has two meanings - we'll get to both in a minute.</aside>
 </section>
@@ -88,12 +88,13 @@
 <!-- ================= Infino ================= -->
 
 <section>
-  <h2>Infino &amp; Infino Cloud</h2>
+  <h2>What we build: Infino &amp; Infino Cloud</h2>
+  <p class="lead" style="margin-bottom: 20px !important"><b class="orange">Infino is a database engine.</b> Same space as Snowflake, turbopuffer and OpenSearch.</p>
   <div class="cols two products" style="align-items: stretch">
     <div class="card">
       <p class="product"><a href="https://github.com/infino-ai/infino">Infino</a></p>
       <ul>
-        <li>Embedded, open source retrieval library built in Rust</li>
+        <li>Open source database engine, built in Rust. Runs embedded in your app</li>
         <li>Supports millisecond SQL, FTS, vector &amp; hybrid queries over TBs of data, and amongst the fastest in each (<a href="https://infino.ai/benchmarks/">benchmarks</a>)</li>
         <li>Data stays plain Parquet, on local disk or object storage</li>
         <li>Use it from Python, Node.js or Rust</li>
@@ -102,14 +103,79 @@
     <div class="card">
       <p class="product"><a href="https://platform.infino.ws">Infino Cloud</a></p>
       <ul>
-        <li>Managed offering of Infino (<a href="https://platform.infino.ws">platform.infino.ws</a>)</li>
+        <li>Hosted Infino: we run it for you (<a href="https://platform.infino.ws">platform.infino.ws</a>)</li>
         <li>Same API: change only the <span class="mono">connect</span> target</li>
         <li>Zero config setup: <span class="mono">optimize</span> and <span class="mono">gc</span> run for you</li>
         <li>Enterprise features</li>
       </ul>
     </div>
   </div>
-  <aside class="notes">~1.5 min. Be ready to back up "amongst the fastest" (infino.ai/benchmarks): on ClickBench (benchmark.clickhouse.com, infino folder upstream) Infino is #1 among search engines. VectorDBBench (zilliztech/VectorDBBench#863) and Search Benchmark, the Game (quickwit-oss/search-benchmark-game#92) PRs are still open, so do not claim a spot on those boards yet. Why latency is hard for us: sub-second queries over terabytes, but one query fans out into many object storage reads; every read is a network round trip, so one serial loop adds seconds; logs say THAT a query was slow, not WHERE; local profilers don't see time spent waiting on the network. The point: with this many network reads, the only way to see where time goes is tracing.</aside>
+  <p class="yellow" style="margin-top: -6px"><b>This talk:</b> Infino's observability stack, and how it helps us find and fix slow queries.</p>
+  <aside class="notes">~1.5 min. Say it plainly: Infino is a database engine, in the same space as Snowflake, turbopuffer and OpenSearch. Infino Cloud is the hosted version. Everything after this slide is about our observability stack and how it helps us find why queries are slow. Be ready to back up "amongst the fastest" (infino.ai/benchmarks): on ClickBench (benchmark.clickhouse.com, infino folder upstream) Infino is #1 among search engines. VectorDBBench (zilliztech/VectorDBBench#863) and Search Benchmark, the Game (quickwit-oss/search-benchmark-game#92) PRs are still open, so do not claim a spot on those boards yet. Why latency is hard for us: sub-second queries over terabytes, but one query fans out into many object storage reads; every read is a network round trip, so one serial loop adds seconds; logs say THAT a query was slow, not WHERE; local profilers don't see time spent waiting on the network. The point: with this many network reads, the only way to see where time goes is tracing.</aside>
+</section>
+
+<section>
+  <h2>How Infino works</h2>
+  <div class="cols three how">
+    <div class="card">
+      <p class="step-no orange">1 · INGEST</p>
+      <p class="mono">table.append(rows)</p>
+      <ul>
+        <li>Each write is one immutable Parquet file, with the BM25 and vector indexes inside</li>
+        <li>A commit swaps the table's manifest: all rows appear, or none</li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="step-no orange">2 · QUERY</p>
+      <p class="mono">table.hybrid_search(…)</p>
+      <ul>
+        <li>Indexes are sorted, so a top-10 is a few byte-range reads, not a file download</li>
+        <li>Ranges are cached on local disk. A repeated query makes zero network calls</li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="step-no orange">3 · OPTIMIZE</p>
+      <p class="mono">table.optimize()</p>
+      <ul>
+        <li>Runs in the background</li>
+        <li>Many small files means many reads per query. Optimize merges them and rebuilds the indexes, so queries get faster</li>
+      </ul>
+    </div>
+  </div>
+  <p class="yellow">Every step talks to object storage: 20–100 ms per request. One slow loop adds seconds.</p>
+  <aside class="notes">~1.5 min. The three things the engine does. Ingest: append writes one Parquet file per batch with the indexes inside; a commit swaps the manifest atomically. Query: read the manifest, then only the byte ranges needed; cached ranges make repeat queries ~125 us. Optimize: merge small files and rebuild indexes in the background; remember this one, we come back to it in "Optimizing the Optimizer". The punchline: almost all the time is network reads, which is why we need traces.</aside>
+</section>
+
+<section>
+  <h2>Infino Cloud architecture</h2>
+  <div class="flow arch">
+    <div class="node pu">Your app<small>Python · Node.js · REST</small></div>
+    <span class="arrow">→</span>
+    <div class="node gw">Gateway<small>front door</small></div>
+    <span class="arrow">→</span>
+    <div class="node wk">Worker node<small>runs the Infino engine</small></div>
+    <span class="arrow">→</span>
+    <div class="node yl">Object storage<small>Parquet files</small></div>
+  </div>
+  <div class="cols two" style="align-items: stretch">
+    <div class="card">
+      <p class="orange"><b>Gateway</b></p>
+      <ul>
+        <li>Checks the API key</li>
+        <li>Finds the worker that serves the table and forwards the request</li>
+        <li>Stateless: many run behind a load balancer</li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="blue"><b>Worker node</b></p>
+      <ul>
+        <li>Runs the same Infino engine you can embed</li>
+        <li>Caches byte ranges on local NVMe disk</li>
+        <li>Reads and writes Parquet on object storage</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">~1 min. Keep it to these two services. A request goes app, gateway, worker, object storage. Two services in the path is why we need distributed tracing later: one request should be one trace across gateway and worker.</aside>
 </section>
 
 <!-- ================= Signals ================= -->
@@ -378,16 +444,48 @@ docker compose up -d</pre>
 <!-- ================= Optimizer ================= -->
 
 <section>
-  <h2>Optimizing the Optimizer</h2>
+  <h2>Optimizing the Optimizer (1/3)</h2>
   <p class="muted"><b>What the trace showed → what we changed</b> · spans per phase added in <a class="pr-link" href="https://github.com/infino-ai/infino/pull/854">#854</a></p>
-  <div class="changes">
-    <div class="change fragment"><span>Network calls, e.g. manifest part GETs, done serially</span><i>→</i><b>Run them concurrently: <span class="mono">buffer_unordered</span> <a class="pr-link" href="https://github.com/infino-ai/infino/pull/1033">#1033</a></b></div>
-    <div class="change fragment"><span>Same section fetched many times</span><i>→</i><b>Cache it to cut ranged GETs <a class="pr-link" href="https://github.com/infino-ai/infino/pull/886">#886</a></b></div>
-    <div class="change fragment"><span><span class="mono">build_from_readers_fts_merge_to</span> took the most time</span><i>→</i><b>k-way merge of terms from all readers <a class="pr-link" href="https://github.com/infino-ai/infino/pull/834">#834</a></b></div>
-    <div class="change fragment"><span>Term encoding used one core</span><i>→</i><b>Encode terms on all cores <a class="pr-link" href="https://github.com/infino-ai/infino/pull/865">#865</a></b></div>
-    <div class="change fragment"><span>Doc order bisect ran serially</span><i>→</i><b>Run the bisect in parallel on the rayon pool <a class="pr-link" href="https://github.com/infino-ai/infino/pull/862">#862</a></b></div>
+  <div class="card trace-file">
+    <p class="orange"><b>Trace: <a class="mono" href="https://github.com/Pranav2612000/lgtm-ship-the-database/blob/main/traces/tempo_optimizer.json">traces/tempo_optimizer.json</a></b></p>
+    <p>Downloaded from Tempo. Perfetto can't open Tempo's format directly, so:</p>
+    <ol>
+      <li>Convert it with <a href="https://pranavjoglekarcodes.web.app/tools/otlp-to-perfetto/">pranavjoglekarcodes.web.app/tools/otlp-to-perfetto</a></li>
+      <li>Open the result in <a href="https://ui.perfetto.dev">ui.perfetto.dev</a></li>
+    </ol>
   </div>
-  <aside class="notes">~5 min (includes the traces). VERIFY before the talk: keep only the rows that actually made optimize faster. Rows are from your PRs: #1033 (parallel manifest part loads, issue #1025: 2,112 parts went from 287 s to ~10 s with 32 loads at a time), #886 (cache fts section), #834 (k-way merge), #865 (all cores for encoding), #862 (parallel bisect). The first step was adding spans per phase (#854) - say that out loud: measure first (Pike rule 2). Show the trace for each fix as you reveal its row, in Perfetto (ui.perfetto.dev): traces/tempo_optimizer.json (the serial manifest.part_load staircase), traces/optimizer_base.json, traces/optimizer_no_cache.json. Keep them pre-loaded in tabs.</aside>
+  <div class="changes">
+    <div class="change fragment" data-fragment-index="1"><span>Network calls, e.g. manifest part GETs, done serially</span><i class="fragment" data-fragment-index="2">→</i><b class="fragment" data-fragment-index="2">Run them concurrently: <span class="mono">buffer_unordered</span> <a class="pr-link" href="https://github.com/infino-ai/infino/pull/1033">#1033</a></b></div>
+  </div>
+  <aside class="notes">~2 min. Open the trace first and ask the room what is wrong; reveal the problem, then the fix, one click each. The first step was adding spans per phase (#854) - say that out loud: measure first (Pike rule 2). Show the trace: the serial manifest.part_load staircase. #1033 (issue #1025): 2,112 parts went from 287 s to ~10 s with 32 loads at a time. Keep the converted trace pre-loaded in a Perfetto tab.</aside>
+</section>
+
+<section>
+  <h2>Optimizing the Optimizer (2/3)</h2>
+  <p class="muted"><b>What the trace showed → what we changed</b></p>
+  <div class="card trace-file">
+    <p class="orange"><b>Trace: <a class="mono" href="https://github.com/Pranav2612000/lgtm-ship-the-database/blob/main/traces/optimizer_no_cache.json">traces/optimizer_no_cache.json</a></b></p>
+    <p>Open it in <a href="https://ui.perfetto.dev">ui.perfetto.dev</a></p>
+  </div>
+  <div class="changes">
+    <div class="change fragment" data-fragment-index="1"><span>Same section fetched many times</span><i class="fragment" data-fragment-index="2">→</i><b class="fragment" data-fragment-index="2">Cache it to cut ranged GETs <a class="pr-link" href="https://github.com/infino-ai/infino/pull/886">#886</a></b></div>
+  </div>
+  <aside class="notes">~1.5 min. Open the trace first and ask the room what is wrong; reveal the problem, then the fix, one click each. Show the trace without the cache: the same fts section read again and again with ranged GETs. #886 caches it. Keep it pre-loaded in a Perfetto tab.</aside>
+</section>
+
+<section>
+  <h2>Optimizing the Optimizer (3/3)</h2>
+  <p class="muted"><b>What the trace showed → what we changed</b></p>
+  <div class="card trace-file">
+    <p class="orange"><b>Trace: <a class="mono" href="https://github.com/Pranav2612000/lgtm-ship-the-database/blob/main/traces/optimizer_base.json">traces/optimizer_base.json</a></b></p>
+    <p>Open it in <a href="https://ui.perfetto.dev">ui.perfetto.dev</a></p>
+  </div>
+  <div class="changes">
+    <div class="change fragment" data-fragment-index="1"><span><span class="mono">build_from_readers_fts_merge_to</span> took the most time</span><i class="fragment" data-fragment-index="2">→</i><b class="fragment" data-fragment-index="2">k-way merge of terms from all readers <a class="pr-link" href="https://github.com/infino-ai/infino/pull/834">#834</a></b></div>
+    <div class="change fragment" data-fragment-index="3"><span>Term encoding used one core</span><i class="fragment" data-fragment-index="4">→</i><b class="fragment" data-fragment-index="4">Encode terms on all cores <a class="pr-link" href="https://github.com/infino-ai/infino/pull/865">#865</a></b></div>
+    <div class="change fragment" data-fragment-index="5"><span>Doc order bisect ran serially</span><i class="fragment" data-fragment-index="6">→</i><b class="fragment" data-fragment-index="6">Run the bisect in parallel on the rayon pool <a class="pr-link" href="https://github.com/infino-ai/infino/pull/862">#862</a></b></div>
+  </div>
+  <aside class="notes">~2 min. Open the trace first and ask the room what is wrong; reveal the problem, then the fix, one click each. VERIFY before the talk: keep only the rows that actually made optimize faster. #834 (k-way merge), #865 (all cores for encoding), #862 (parallel bisect). Show each in the trace as you reveal its row. Keep it pre-loaded in a Perfetto tab.</aside>
 </section>
 
 <!-- ================= Serial reads ================= -->

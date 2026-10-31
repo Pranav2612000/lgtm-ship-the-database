@@ -240,6 +240,13 @@ pre.plain { font-family: var(--mono); font-size: 21px; background: none; padding
 .flow .node small { font-size: 18px; }
 .flow .arrow { font-size: 48px; color: var(--muted); }
 
+.flow.arch { gap: 14px; margin: 10px 0 30px; }
+.flow.arch .node { width: 230px; font-size: 24px; padding: 20px 8px; }
+.how ul { margin: 0 0 0 1em; }
+.how li { font-size: 21px; margin-bottom: 8px; }
+.how .step-no { font-size: 26px; font-weight: 800; margin-bottom: 6px; }
+.how .mono { font-size: 17px; color: var(--muted); }
+
 /* optimizer changes */
 .change {
   display: grid; grid-template-columns: minmax(0, 1.2fr) 30px minmax(0, 1fr); align-items: center; gap: 12px;
@@ -267,4 +274,8 @@ pre.plain { font-family: var(--mono); font-size: 21px; background: none; padding
 .change .mono { font-size: 0.78em; }
 .reveal a.pr-link { color: var(--muted); font-weight: normal; font-size: 0.8em; text-decoration: underline; }
 .changes { margin-top: 20px; }
+.trace-file { font-size: 24px; }
+.trace-file a { color: var(--yellow); }
+.trace-file p.orange a.mono { color: var(--orange); }
+.trace-file ol { margin: 0 0 0 1.2em; }
 .changes .change { grid-template-columns: minmax(0, 1.22fr) 30px minmax(0, 1fr); padding: 22px 30px; margin-bottom: 16px; font-size: 25px; }

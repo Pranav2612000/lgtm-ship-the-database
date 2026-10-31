@@ -27,7 +27,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time",
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# Same OpenTelemetry versions as infino-platform.
+# Same OpenTelemetry versions as Infino Cloud.
 opentelemetry = { version = "0.30", default-features = false, features = ["metrics", "logs", "trace"] }
 opentelemetry_sdk = { version = "0.30", default-features = false, features = ["metrics", "logs", "trace"] }
 opentelemetry-otlp = { version = "0.30", default-features = false, features = ["metrics", "logs", "trace", "http-proto", "reqwest-blocking-client"] }
