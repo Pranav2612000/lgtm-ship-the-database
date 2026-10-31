@@ -1,0 +1,46 @@
+11:50 noon - 12:25 pm:
+Session 3: LGTM: Ship the database, Pranav Joglekar (Founding Engineer, Infino AI)
+About Session: This talk covers how we use our self hosted LGTM stack ( Loki, Grafana, Tempo & Mimir ) to help us build & scale Infino.
+- Introduction about Infino, its architecture & why latency matters for us.
+- What is LGTM and how Infino uses the stack and other features, especially from the POV of a database company
+- Deep dive into tempo, tracing & profiling in rust. What it is, how to set it up & use it.
+- Distributed tracing and how it's orchestrated ( at Infino ). ( ui.perfetto.dev for profiling )
+- Talk about how we were able to 10x the optimizer speed and how tracing helped us do this quickly and confidently.
+- Using it in the age of AI with an MCP demo.
+
+Slide 1: Title - LGTM: Ship the database by Pranav Joglekar
+Slide 2: About Me
+Slide 3: LGTM - Looks Good To Me GitHub image of a PR with a lot of files and lines changed
+Slide 4: LGTM - Loki Grafana Tempo Mimir
+Slide 5: Contents of this Talk / What should you expect to learn?
+					- How a production observability stack looks like
+					- What sort of problems does it help to solve
+					- Convince you that you need this for your application - Rob Pike's Laws 1 and 2
+Slide 6: What is Infino & Infino-Platform? Why latency matters for us & why traditional methods don't work.
+Slide 7: OTLP / OTel in Rust
+Slide 8: Pushing Logs with eg on how we use them at infino
+Slide 9: Metrics with e.g on how we use them at infino
+Slide 10b: Traces and Spans with e.g. on how we use them at infino
+Slide 11: Grafana Alloy for collecting Logs, Metrics & Traces
+Slide 12: Self Hosted Grafana using Terraform
+Slide 13: Alerting
+Slide 14: GitHub as our source for Dashboards, Alerts etc
+Slide 15: MCP
+Slide 16: Overall architecture: Infino Platform distilled architecture with monitoring - Alloy, LGTM, OTLP and Self Hosted Grafana, Alerting & MCP 
+Slide 17: Distributed Tracing
+Slide 18: Demo 1: Simplified Infino Platform with randomly added timeouts on Gateway, and how Grafana helps find and resolve them
+Slide 19: Demo 2: Optimizer Demo
+Slide 20: Demo 3: Network calls intentionally done serially. Downloading the trace through Tempo, converting it to perfetto format and viewing on perfetto
+Slide 21: Demo 4: Using Grafana MCP with claude to figure out the issues
+
+
+TODO:
+- Distilled Infino Platform Setup ( Gateway + Node with Engine ). A known bug in gateway
+
+
+IDEAS:
+- Randomly added timeouts in parser
+- Network calls intentionally done serially -> which can be parallelized
+- Optimizer improvements that I worked on ( K way merge Idea )
+
+

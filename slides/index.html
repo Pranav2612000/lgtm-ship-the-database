@@ -379,13 +379,13 @@ docker compose up -d</pre>
 
 <section>
   <h2>Optimizing the Optimizer</h2>
-  <p class="muted"><b>What the trace showed → what we changed</b></p>
+  <p class="muted"><b>What the trace showed → what we changed</b> · spans per phase added in <a class="pr-link" href="https://github.com/infino-ai/infino/pull/854">#854</a></p>
   <div class="changes">
-    <div class="change fragment"><span>Network calls, e.g. manifest part GETs, done serially</span><i>→</i><b>Run them concurrently: <span class="mono">buffer_unordered</span></b></div>
-    <div class="change fragment"><span>Same section fetched many times</span><i>→</i><b>Cache it to cut ranged GETs</b></div>
-    <div class="change fragment"><span><span class="mono">build_from_readers_fts_merge_to</span> took the most time</span><i>→</i><b>k-way merge of terms from all readers</b></div>
-    <div class="change fragment"><span>Term encoding used one core</span><i>→</i><b>Encode terms on all cores</b></div>
-    <div class="change fragment"><span>Doc order bisect ran serially</span><i>→</i><b>Run the bisect in parallel on the rayon pool</b></div>
+    <div class="change fragment"><span>Network calls, e.g. manifest part GETs, done serially</span><i>→</i><b>Run them concurrently: <span class="mono">buffer_unordered</span> <a class="pr-link" href="https://github.com/infino-ai/infino/pull/1033">#1033</a></b></div>
+    <div class="change fragment"><span>Same section fetched many times</span><i>→</i><b>Cache it to cut ranged GETs <a class="pr-link" href="https://github.com/infino-ai/infino/pull/886">#886</a></b></div>
+    <div class="change fragment"><span><span class="mono">build_from_readers_fts_merge_to</span> took the most time</span><i>→</i><b>k-way merge of terms from all readers <a class="pr-link" href="https://github.com/infino-ai/infino/pull/834">#834</a></b></div>
+    <div class="change fragment"><span>Term encoding used one core</span><i>→</i><b>Encode terms on all cores <a class="pr-link" href="https://github.com/infino-ai/infino/pull/865">#865</a></b></div>
+    <div class="change fragment"><span>Doc order bisect ran serially</span><i>→</i><b>Run the bisect in parallel on the rayon pool <a class="pr-link" href="https://github.com/infino-ai/infino/pull/862">#862</a></b></div>
   </div>
   <aside class="notes">~5 min (includes the traces). VERIFY before the talk: keep only the rows that actually made optimize faster. Rows are from your PRs: #1033 (parallel manifest part loads, issue #1025: 2,112 parts went from 287 s to ~10 s with 32 loads at a time), #886 (cache fts section), #834 (k-way merge), #865 (all cores for encoding), #862 (parallel bisect). The first step was adding spans per phase (#854) - say that out loud: measure first (Pike rule 2). Show the trace for each fix as you reveal its row, in Perfetto (ui.perfetto.dev): traces/tempo_optimizer.json (the serial manifest.part_load staircase), traces/optimizer_base.json, traces/optimizer_no_cache.json. Keep them pre-loaded in tabs.</aside>
 </section>
@@ -424,8 +424,10 @@ docker compose up -d</pre>
 
 <section class="title-slide">
   <h1>Thank you! Questions?</h1>
-  <p class="subtitle">infino.ai · github.com/infino-ai/infino</p>
-  <p class="subtitle">Slides, demo and traces: <a href="https://github.com/Pranav2612000/lgtm-ship-the-database" style="color: inherit">github.com/Pranav2612000/lgtm-ship-the-database</a></p>
+  <div class="qrs">
+    <a href="https://github.com/infino-ai/infino"><img src="assets/qr-infino.svg" alt="QR code for github.com/infino-ai/infino"><span>Infino<br>github.com/infino-ai/infino</span></a>
+    <a href="https://github.com/Pranav2612000/lgtm-ship-the-database"><img src="assets/qr-slides.svg" alt="QR code for github.com/Pranav2612000/lgtm-ship-the-database"><span>Slides, demo and traces<br>github.com/Pranav2612000/lgtm-ship-the-database</span></a>
+  </div>
   <p class="speaker">Pranav Joglekar · github.com/Pranav2612000</p>
   <aside class="notes">Leave this up during Q&amp;A.</aside>
 </section>

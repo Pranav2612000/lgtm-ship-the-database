@@ -63,6 +63,10 @@ html, body, .reveal-viewport { background: var(--bg); }
 .reveal .title-slide { display: flex !important; flex-direction: column; justify-content: center; padding-left: 80px; }
 .title-slide .rocket { height: 0.85em; width: 0.85em; vertical-align: -0.08em; margin-left: 0.15em; fill: none; stroke: var(--orange); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .title-slide .subtitle { color: var(--orange); font-size: 34px; }
+.title-slide .qrs { display: flex; gap: 64px; margin-top: 24px; }
+.title-slide .qrs a { display: flex; align-items: center; gap: 24px; color: var(--orange); text-decoration: none; font-size: 24px; line-height: 1.4; }
+.title-slide .qrs img { width: 200px; height: 200px; margin: 0; border-radius: 8px; }
+.title-slide .qrs span { max-width: 300px; overflow-wrap: anywhere; }
 .title-slide .speaker { color: var(--muted); font-size: 26px; margin-top: 60px; }
 
 .reveal img.photo { width: 300px; height: auto; border-radius: 14px; margin: 0; }
@@ -261,5 +265,6 @@ pre.plain { font-family: var(--mono); font-size: 21px; background: none; padding
 /* logo on every slide */
 .reveal .slides section img.logo { position: absolute; left: 40px; bottom: 16px; height: 36px; width: auto; margin: 0; }
 .change .mono { font-size: 0.78em; }
+.reveal a.pr-link { color: var(--muted); font-weight: normal; font-size: 0.8em; text-decoration: underline; }
 .changes { margin-top: 20px; }
 .changes .change { grid-template-columns: minmax(0, 1.22fr) 30px minmax(0, 1fr); padding: 22px 30px; margin-bottom: 16px; font-size: 25px; }
